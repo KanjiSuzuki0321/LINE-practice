@@ -25,21 +25,62 @@ def lambda_handler(event, context):
     ok_json = os.environ["ok_json"] # error message as "event" 
     error_json = os.environ["error_json"]
 
-    @handler.add(MessageEvent, message=TextMessage) 
+    @handler.add(MessageEvent) 
     # set function which is run when handler gets specific event "MessageEvent"
     def message(line_event):
+        # call back
         text = line_event.message.text
-        line_bot_api.reply_message(line_event.reply_token, TextSendMessage(text=text)) 
-        #-- new line--
+        # get the user id who send this message
+        user_id = line_event.source.user_id
+        
+        # access to dynamoDB
         dynamodb = boto3.resource('dynamodb')
         table = dynamodb.Table('kanji-practice')
-        response = table.put_item(
-           Item={
-                'id': line_event.source.userId,
-                'text': line_event.message.text,
-            }
-        )
-        #-- new line--
+        if(text == "好きです！"):
+            try:
+                # get record if exit
+                record = table.get_item(
+                    Key={
+                        'id': user_id
+                    }
+                )
+                
+                count = int(record['Item']['count'])
+                count += 1
+                
+                table.delete_item(
+                    Key={
+                        'id': user_id
+                    }
+                )
+                table.put_item(
+                       Item={
+                            'id': user_id,
+                            'count': count,
+                        }
+                    )
+                
+                if count == 2:
+                    line_bot_api.reply_message(line_event.reply_token, TextSendMessage(text='Umm, No!')) 
+                elif count == 3: # say yes if count == 3
+                    line_bot_api.reply_message(line_event.reply_token, TextSendMessage(text='Yes!')) 
+                else:
+                    line_bot_api.reply_message(line_event.reply_token, TextSendMessage(text="Let's break up.")) 
+        
+            # if not exist, reate new record
+            except:
+                count = 1
+                table.put_item(
+                       Item={
+                            'id': user_id,
+                            'count': count,
+                        }
+                    )
+                line_bot_api.reply_message(line_event.reply_token, TextSendMessage(text='No!')) 
+                
+        else:
+            line_bot_api.reply_message(line_event.reply_token, TextSendMessage(text=text)) 
+            
         
 
     try:
